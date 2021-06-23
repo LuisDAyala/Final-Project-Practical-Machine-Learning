@@ -1,0 +1,69 @@
+---
+title: "Final Project Practical Machine Learning"
+author: "Luid David Ayala Bautista"
+date: "6/22/2021"
+output: html_document
+---
+
+# Introduction
+This document is the final project for the course “Practical Machine Learning”. The goal of this project is creating a machine learning algorithm to predict the activity type that a person is doing based of several measurements from accelerometers on the belt, forearm, arm, and dumbbell. To see more information about the data please go [here](http://groupware.les.inf.puc-rio.br/har).  
+The document is divided in sections, each one has the source code as well as a short explanation of what was done. In First place, the data is loaded to work with it.  
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(caret)
+library(yardstick)
+library(rpart)
+training <-read_csv("pml-training.csv")
+testing<-read_csv("pml-testing.csv")
+```
+
+# Preprocessing
+In this section the data was explored to get a familiarity with it. The function skim() was used. In first place, it was eliminated those predictors with near zero variance. This was done because those predictors will not apport much to the prediction. Then it was notice that several variables had several NAs values, so considering that there was a lot of predictors availed, it was deciding to remove those variables. Also, variables likely not informative such the username was removed too. Finally, the outcome class was changed to factor.  
+It is relevant to say that in other to be able to have an estimate of the out-sample error, the data was divided into test and training set.  
+```{r}
+#general look to the data
+library(skimr)
+
+#remove predictors with near zero variance 
+new_training<-training[,-nearZeroVar(training)]
+
+#remove predictors with large NAs
+new_training<-new_training[ , colSums(is.na(new_training)) < 1900]
+
+#remove not useful variables (row_id, user_name, dates)
+new_training<-new_training%>%select(-c(X1,user_name, cvtd_timestamp))
+
+#change outcome class
+new_training$classe <- factor(new_training$classe)
+
+#data slicing
+in_train <- createDataPartition(y=new_training$classe, p=.75, list = F)
+new_training <- new_training[in_train,]
+validation <- new_training[-in_train,]
+```
+
+# Model fitting
+Consider the nature of the output as well as the hardware limitation, was decided fit three models to explore which one will have the best performance. The models were a *Decision Tree*, *Linear Discriminant Analysis* and *Gradient Boosted Method*. 
+A performance comparison can be seen bellow.  
+```{r, set.seed(123), cache=TRUE, message=FALSE, results='hide'}
+set.seed(123)
+# Fit model
+model_tree<-train(classe ~., method="rpart", data=new_training)
+model_lda<-train(classe ~., method="lda", data=new_training)
+model_gbm<-train(classe ~., method="gbm", data=new_training)
+```
+
+```{r, echo=FALSE}
+comparison<-data.frame(
+  model= c("D. Tree", "LDA", "GBM"),
+  accuracy= c(0.534, 0.713, 0.9987)
+)
+knitr::kable(comparison)
+```
+
+# Out-sample error  
+To estimate the out-sample error, the best model (GBM) was used in the test set. We can see that the accuracy estimate was **0.9986**, so the out-sample error is estimated to be **0.0014**.   
+```{r}
+pred_gbm<-predict(model_gbm, newdata = validation)
+accuracy(validation, truth = classe, pred_gbm)
+```
